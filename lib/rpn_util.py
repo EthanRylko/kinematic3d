@@ -1868,8 +1868,8 @@ def evaluate_kitti_results_verbose(test_path, dataset_test, results_path, test_i
     try:
         backend = plt.get_backend()
         plt.switch_backend('agg')
-        save_kitti_ROC(results_obj, results_path.replace('/data', '/'), rpn_conf.lbls)
         print_kitti_ROC(results_obj, test_iter, rpn_conf.lbls, use_logging=use_logging)
+        save_kitti_ROC(results_obj, results_path.replace('/data', '/'), rpn_conf.lbls)
         plt.switch_backend(backend)
     except:
         pass

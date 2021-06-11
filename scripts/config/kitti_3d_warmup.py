@@ -21,7 +21,7 @@ def Config():
     conf.display = 250
     conf.do_test = True
     
-    conf.fast_eval = True
+    conf.fast_eval = False
     
     # sgd parameters
     conf.lr_policy = 'poly'

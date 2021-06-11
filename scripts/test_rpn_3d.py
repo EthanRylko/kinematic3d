@@ -22,10 +22,10 @@ from lib.imdb_util import *
 
 # settings
 exp_name = 'val1_uncertainty'
-weights_path = '/home/garrick/Desktop/Kinematic3D-Release/val1_uncertainty/model_final'
-conf_path = '/home/garrick/Desktop/Kinematic3D-Release/val1_uncertainty/conf.pkl'
+weights_path = '/mnt/home/rylkoeth/kitti_3d_warmup_weights/weights/model_80000_pkl'
+conf_path = '/mnt/home/rylkoeth/kitti_3d_warmup_weights/conf.pkl'
 
-out_dir = '/home/garrick/Desktop/tmp/'
+out_dir = '/mnt/home/rylkoeth/tmp/'
 
 dataset_test = 'kitti_split1'
 dataset_type = 'validation'
