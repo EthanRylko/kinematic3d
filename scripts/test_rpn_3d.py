@@ -335,4 +335,4 @@ _, test_iter, _ = file_parts(results)
 test_iter = test_iter.replace('results_', '')
 
 if dataset_type == 'validation':
-    evaluate_kitti_results_verbose('data', dataset_test, results_data, test_iter, rpn_conf, use_logging=False, fast=True, default_eval=eval_type)
+    evaluate_kitti_results_verbose('data', dataset_test, results_data, test_iter, rpn_conf, use_logging=False, fast=False, default_eval=eval_type)
