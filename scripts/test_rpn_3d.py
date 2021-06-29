@@ -21,9 +21,9 @@ np.set_printoptions(suppress=True)
 from lib.imdb_util import *
 
 # settings
-exp_name = 'val1_uncertainty'
-weights_path = '/mnt/home/rylkoeth/kitti_3d_warmup_weights/weights/model_80000_pkl'
-conf_path = '/mnt/home/rylkoeth/kitti_3d_warmup_weights/conf.pkl'
+exp_name = 'trained_mnas'
+weights_path = '/mnt/home/rylkoeth/med_mnas/weights/model_80000_pkl'
+conf_path = '/mnt/home/rylkoeth/med_mnas/conf.pkl'
 
 out_dir = '/mnt/home/rylkoeth/tmp/'
 
@@ -31,7 +31,7 @@ dataset_test = 'kitti_split1'
 dataset_type = 'validation'
 
 suffix = '_ss'
-ignore_cache = 0
+ignore_cache = 1
 write_im = 1
 use_gts = 1
 
