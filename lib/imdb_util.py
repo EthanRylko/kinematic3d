@@ -124,8 +124,8 @@ class Dataset(torch.utils.data.Dataset):
 
                     # get sorted filepaths
                     annlist = sorted(glob(ann_folder + '*.txt'))
-
                     imdb_start = time()
+                    print(len(annlist))
 
                     self.affine_size = None if not ('affine_size' in conf) else conf.affine_size
 
@@ -299,6 +299,15 @@ class Dataset(torch.utils.data.Dataset):
                             for id_num in range(len(mapping)):
                                 raw = mapping[rand_map[id_num] - 1]
                                 ids.append(raw)
+
+                        train_folder = os.path.join(root, db['name'], data_type)
+
+                        ann_folder = os.path.join(train_folder, 'label_2', '')
+                        cal_folder = os.path.join(train_folder, 'calib', '')
+                        im_folder = os.path.join(train_folder, 'image_2', '')
+
+                        # get sorted filepaths
+                        annlist = sorted(glob(ann_folder + '*.txt'))
 
                         for anind, annpath in enumerate(annlist):
 
@@ -617,7 +626,6 @@ def read_kitti_cal(calfile):
     Args:
         calfile (str): path to single calibration file
     """
-
     text_file = open(calfile, 'r')
 
     p2pat = re.compile(('(P2:)\s+(fpat)\s+(fpat)\s+(fpat)\s+(fpat)\s+(fpat)\s+(fpat)\s+(fpat)\s+(fpat)\s+(fpat)' +
@@ -895,7 +903,6 @@ def balance_samples(conf, imdb):
     """
 
     sample_weights = np.ones(len(imdb))
-
     if conf.fg_image_ratio >= 0:
 
         empty_inds = []

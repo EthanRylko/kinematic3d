@@ -54,6 +54,7 @@ def generate_anchors(conf, imdb, cache_folder):
 
         # has 3d? then need to compute stats for each new dimension
         # presuming that anchors are initialized in "2d"
+        print(conf.has_3d)
         if conf.has_3d:
 
             # compute the default stats for each anchor
@@ -192,22 +193,32 @@ def generate_anchors(conf, imdb, cache_folder):
         anchors = anchors[np.all(anchors == -1, axis=1) ==  False, :]
 
         logging.info('Anchor info')
+        if conf.has_3d:
+            for aind, anchor in enumerate(anchors):
+                w = anchor[2] - anchor[0] + 1
+                h = anchor[3] - anchor[1] + 1
+                ar = w / h
+                line = 'anchor {:2} w: {:6.2f}, h: {:6.2f}, ar: {:.2f}, z: {:5.2f}, w3d: {:.2f}, h3d: {:.2f}, l3d: {:.2f}, rot: {:5.2f}'.format(
+                    aind, w, h, ar, anchor[4], anchor[5], anchor[6], anchor[7], anchor[8]
+                )
 
-        for aind, anchor in enumerate(anchors):
-            w = anchor[2] - anchor[0] + 1
-            h = anchor[3] - anchor[1] + 1
-            ar = w / h
-            line = 'anchor {:2} w: {:6.2f}, h: {:6.2f}, ar: {:.2f}, z: {:5.2f}, w3d: {:.2f}, h3d: {:.2f}, l3d: {:.2f}, rot: {:5.2f}'.format(
-                aind, w, h, ar, anchor[4], anchor[5], anchor[6], anchor[7], anchor[8]
-            )
+                if decomp_alpha:
+                    line += ', sin: {:6.2f}, cos: {:6.2f}'.format(anchor[9], anchor[10])
 
-            if decomp_alpha:
-                line += ', sin: {:6.2f}, cos: {:6.2f}'.format(anchor[9], anchor[10])
+                if has_vel:
+                    line += ', vel: {:6.2f}'.format(anchor[11])
 
-            if has_vel:
-                line += ', vel: {:6.2f}'.format(anchor[11])
+                logging.info(line)
+        else:
+            for aind, anchor in enumerate(anchors):
+                w = anchor[2] - anchor[0] + 1
+                h = anchor[3] - anchor[1] + 1
+                ar = w / h
+                line = 'anchor {:2} w: {:6.2f}, h: {:6.2f}, ar: {:.2f}'.format(
+                    aind, w, h, ar
+                )
 
-            logging.info(line)
+                logging.info(line)
 
         if (cache_folder is not None):
             pickle_write(os.path.join(cache_folder, 'anchors.pkl'), anchors)
@@ -417,8 +428,9 @@ def compute_targets(gts_val, gts_ign, box_lbls, rois, fg_thresh, ign_thresh, bg_
 
     ols = None
     has_3d = gts_3d is not None
-    decomp_alpha = anchors.shape[1] >= 11
-    has_vel = anchors.shape[1] == 12
+    #decomp_alpha = anchors.shape[1] >= 11
+    #has_vel = anchors.shape[1] == 12
+    decomp_alpha, has_vel = False, False
 
     # init transforms which respectively hold [dx, dy, dw, dh, label]
     # for labels bg=-1, ign=0, fg>=1
@@ -1067,12 +1079,13 @@ def im_detect_3d(im, net, rpn_conf, preprocess, p2, gpu=0, synced=False, return_
         bbox_w = bbox_2d[:, :, 2]
         bbox_h = bbox_2d[:, :, 3]
 
-    bbox_x3d = bbox_3d[:, :, 0]
-    bbox_y3d = bbox_3d[:, :, 1]
-    bbox_z3d = bbox_3d[:, :, 2]
-    bbox_w3d = bbox_3d[:, :, 3]
-    bbox_h3d = bbox_3d[:, :, 4]
-    bbox_l3d = bbox_3d[:, :, 5]
+    if 'has_3d' in rpn_conf and rpn_conf.has_3d:
+        bbox_x3d = bbox_3d[:, :, 0]
+        bbox_y3d = bbox_3d[:, :, 1]
+        bbox_z3d = bbox_3d[:, :, 2]
+        bbox_w3d = bbox_3d[:, :, 3]
+        bbox_h3d = bbox_3d[:, :, 4]
+        bbox_l3d = bbox_3d[:, :, 5]
 
     if ('orientation_bins' in rpn_conf) and rpn_conf.orientation_bins > 0:
 
@@ -1091,34 +1104,35 @@ def im_detect_3d(im, net, rpn_conf, preprocess, p2, gpu=0, synced=False, return_
         # gb check
         if ('has_un' in rpn_conf) and rpn_conf.has_un:
             bbox_un = bbox_3d[:, :, 10]
-    else:
+    elif 'has_3d' in rpn_conf and rpn_conf.has_3d:
         bbox_ry3d = bbox_3d[:, :, 6] * rpn_conf.bbox_stds[:, 10][0] + rpn_conf.bbox_means[:, 10][0]
 
     # detransform 3d
-    bbox_x3d = bbox_x3d * rpn_conf.bbox_stds[:, 4][0] + rpn_conf.bbox_means[:, 4][0]
-    bbox_y3d = bbox_y3d * rpn_conf.bbox_stds[:, 5][0] + rpn_conf.bbox_means[:, 5][0]
-    bbox_z3d = bbox_z3d * rpn_conf.bbox_stds[:, 6][0] + rpn_conf.bbox_means[:, 6][0]
-    bbox_w3d = bbox_w3d * rpn_conf.bbox_stds[:, 7][0] + rpn_conf.bbox_means[:, 7][0]
-    bbox_h3d = bbox_h3d * rpn_conf.bbox_stds[:, 8][0] + rpn_conf.bbox_means[:, 8][0]
-    bbox_l3d = bbox_l3d * rpn_conf.bbox_stds[:, 9][0] + rpn_conf.bbox_means[:, 9][0]
+    if 'has_3d' in rpn_conf and rpn_conf.has_3d:
+        bbox_x3d = bbox_x3d * rpn_conf.bbox_stds[:, 4][0] + rpn_conf.bbox_means[:, 4][0]
+        bbox_y3d = bbox_y3d * rpn_conf.bbox_stds[:, 5][0] + rpn_conf.bbox_means[:, 5][0]
+        bbox_z3d = bbox_z3d * rpn_conf.bbox_stds[:, 6][0] + rpn_conf.bbox_means[:, 6][0]
+        bbox_w3d = bbox_w3d * rpn_conf.bbox_stds[:, 7][0] + rpn_conf.bbox_means[:, 7][0]
+        bbox_h3d = bbox_h3d * rpn_conf.bbox_stds[:, 8][0] + rpn_conf.bbox_means[:, 8][0]
+        bbox_l3d = bbox_l3d * rpn_conf.bbox_stds[:, 9][0] + rpn_conf.bbox_means[:, 9][0]
 
-    # find 3d source
-    tracker = rois[:, 4].cpu().detach().numpy().astype(np.int64)
-    src_3d = torch.from_numpy(rpn_conf.anchors[tracker, 4:]).cuda().type(torch.cuda.FloatTensor)
+        # find 3d source
+        tracker = rois[:, 4].cpu().detach().numpy().astype(np.int64)
+        src_3d = torch.from_numpy(rpn_conf.anchors[tracker, 4:]).cuda().type(torch.cuda.FloatTensor)
 
-    # compute 3d transform
-    widths = rois[:, 2] - rois[:, 0] + 1.0
-    heights = rois[:, 3] - rois[:, 1] + 1.0
-    ctr_x = rois[:, 0] + 0.5 * widths
-    ctr_y = rois[:, 1] + 0.5 * heights
+        # compute 3d transform
+        widths = rois[:, 2] - rois[:, 0] + 1.0
+        heights = rois[:, 3] - rois[:, 1] + 1.0
+        ctr_x = rois[:, 0] + 0.5 * widths
+        ctr_y = rois[:, 1] + 0.5 * heights
 
-    bbox_x3d = bbox_x3d[0, :] * widths + ctr_x
-    bbox_y3d = bbox_y3d[0, :] * heights + ctr_y
+        bbox_x3d = bbox_x3d[0, :] * widths + ctr_x
+        bbox_y3d = bbox_y3d[0, :] * heights + ctr_y
 
-    bbox_z3d = src_3d[:, 0] + bbox_z3d[0, :]
-    bbox_w3d = torch.exp(bbox_w3d[0, :]) * src_3d[:, 1]
-    bbox_h3d = torch.exp(bbox_h3d[0, :]) * src_3d[:, 2]
-    bbox_l3d = torch.exp(bbox_l3d[0, :]) * src_3d[:, 3]
+        bbox_z3d = src_3d[:, 0] + bbox_z3d[0, :]
+        bbox_w3d = torch.exp(bbox_w3d[0, :]) * src_3d[:, 1]
+        bbox_h3d = torch.exp(bbox_h3d[0, :]) * src_3d[:, 2]
+        bbox_l3d = torch.exp(bbox_l3d[0, :]) * src_3d[:, 3]
 
     if ('orientation_bins' in rpn_conf) and rpn_conf.orientation_bins > 0:
 
@@ -1138,11 +1152,12 @@ def im_detect_3d(im, net, rpn_conf, preprocess, p2, gpu=0, synced=False, return_
         bbox_ry3d = bbox_rcos
         bbox_ry3d[bbox_axis_sin_mask] = bbox_rsin[bbox_axis_sin_mask]
         bbox_ry3d[bbox_head_pos_mask] = bbox_ry3d[bbox_head_pos_mask] + math.pi
-    else:
+    elif 'has_3d' in rpn_conf and rpn_conf.has_3d:
         bbox_ry3d = bbox_ry3d[0, :] + src_3d[:, 4]
 
     # bundle
-    coords_3d = torch.stack((bbox_x3d, bbox_y3d, bbox_z3d[:bbox_x3d.shape[0]], bbox_w3d[:bbox_x3d.shape[0]], bbox_h3d[:bbox_x3d.shape[0]], bbox_l3d[:bbox_x3d.shape[0]], bbox_ry3d[:bbox_x3d.shape[0]]), dim=1)
+    if 'has_3d' is rpn_conf and rpn_conf.has_3d:
+        coords_3d = torch.stack((bbox_x3d, bbox_y3d, bbox_z3d[:bbox_x3d.shape[0]], bbox_w3d[:bbox_x3d.shape[0]], bbox_h3d[:bbox_x3d.shape[0]], bbox_l3d[:bbox_x3d.shape[0]], bbox_ry3d[:bbox_x3d.shape[0]]), dim=1)
 
     if ('use_el_z' in rpn_conf) and rpn_conf.use_el_z:
         coords_3d = torch.cat((coords_3d, bbox_un.t()), dim=1)
@@ -1158,17 +1173,17 @@ def im_detect_3d(im, net, rpn_conf, preprocess, p2, gpu=0, synced=False, return_
 
         # detach onto cpu
         coords_2d = coords_2d.cpu().detach().numpy()
-        coords_3d = coords_3d.cpu().detach().numpy()
+        if 'has_3d' in rpn_conf and rpn_conf.has_3d: coords_3d = coords_3d.cpu().detach().numpy()
         prob = prob[0, :, :].cpu().detach().numpy()
 
         # scale coords
         coords_2d[:, 0:4] /= scale_factor
-        coords_3d[:, 0:2] /= scale_factor
+        if 'has_3d' in rpn_conf and rpn_conf.has_3d: coords_3d[:, 0:2] /= scale_factor
 
         cls_pred = np.argmax(prob[:, 1:], axis=1) + 1
         scores = np.amax(prob[:, 1:], axis=1)
 
-    else:
+    elif 'has_3d' in rpn_conf and rpn_conf.has_3d:
         coords_3d = coords_3d.cpu().detach().numpy()
         prob = prob[0, :, :].cpu().detach().numpy()
 
@@ -1209,9 +1224,9 @@ def im_detect_3d(im, net, rpn_conf, preprocess, p2, gpu=0, synced=False, return_
     sorted_inds = (-aboxes[:, 4]).argsort()
     original_inds = (sorted_inds).argsort()
     aboxes = aboxes[sorted_inds, :]
-    coords_3d = coords_3d[sorted_inds, :]
+    if 'has_3d' in rpn_conf and rpn_conf.has_3d: coords_3d = coords_3d[sorted_inds, :]
     cls_pred = cls_pred[sorted_inds]
-    tracker = tracker[sorted_inds]
+    if 'has_3d' in rpn_conf and rpn_conf.has_3d: tracker = tracker[sorted_inds]
 
     if synced and aboxes.shape[0] > 0:
 
@@ -1231,15 +1246,20 @@ def im_detect_3d(im, net, rpn_conf, preprocess, p2, gpu=0, synced=False, return_
 
         # pre-nms
         cls_pred = cls_pred[0:min(rpn_conf.nms_topN_pre, cls_pred.shape[0])]
-        tracker = tracker[0:min(rpn_conf.nms_topN_pre, tracker.shape[0])]
         aboxes = aboxes[0:min(rpn_conf.nms_topN_pre, aboxes.shape[0]), :]
-        coords_3d = coords_3d[0:min(rpn_conf.nms_topN_pre, coords_3d.shape[0])]
+
+        if 'has_3d' in rpn_conf and rpn_conf.has_3d:
+            tracker = tracker[0:min(rpn_conf.nms_topN_pre, tracker.shape[0])]
+            coords_3d = coords_3d[0:min(rpn_conf.nms_topN_pre, coords_3d.shape[0])]
 
         # nms
         keep_inds = gpu_nms(aboxes[:, 0:5].astype(np.float32), rpn_conf.nms_thres, device_id=gpu)
 
         # stack cls prediction
-        aboxes = np.hstack((aboxes, cls_pred[:, np.newaxis], coords_3d, tracker[:, np.newaxis]))
+        if 'has_3d' in rpn_conf and rpn_conf.has_3d:
+            aboxes = np.hstack((aboxes, cls_pred[:, np.newaxis], coords_3d, tracker[:, np.newaxis]))
+        else:
+            aboxes = np.hstack((aboxes, cls_pred[:, np.newaxis]))
 
         # suppress boxes
         aboxes = aboxes[keep_inds, :]
@@ -1772,7 +1792,7 @@ def parse_kitti_result(respath, use_40=False):
 
 
 def run_kitti_eval_script(script_path, results_data, lbls, use_40=True):
-
+    print('run eval script')
     # evaluate primary experiment
     with open(os.devnull, 'w') as devnull:
         _ = subprocess.check_output([script_path, results_data], stderr=devnull)
@@ -1789,6 +1809,7 @@ def run_kitti_eval_script(script_path, results_data, lbls, use_40=True):
         respath_3d = os.path.join(results_data, 'stats_{}_detection_3d.txt'.format(lbl))
 
         if os.path.exists(respath_2d):
+            print('eval 2d')
             easy, mod, hard = parse_kitti_result(respath_2d, use_40=use_40)
             results_obj['det_2d_' + lbl] = [easy, mod, hard]
         if os.path.exists(respath_or):

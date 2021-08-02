@@ -68,6 +68,7 @@ class RPN_3D_loss(nn.Module):
 
         self.orientation_bins = False if not ('orientation_bins' in conf) else conf.orientation_bins
 
+        self.has_3d = conf.has_3d
 
     def forward(self, cls, prob, bbox_2d, bbox_3d, imobjs, feat_size, rois=None, rois_3d=None, rois_3d_cen=None, key='gts'):
 
@@ -90,13 +91,14 @@ class RPN_3D_loss(nn.Module):
             bbox_w = bbox_2d[:, :, 2]
             bbox_h = bbox_2d[:, :, 3]
 
-        bbox_x3d = bbox_3d[:, :, 0]
-        bbox_y3d = bbox_3d[:, :, 1]
-        bbox_z3d = bbox_3d[:, :, 2]
-        bbox_w3d = bbox_3d[:, :, 3]
-        bbox_h3d = bbox_3d[:, :, 4]
-        bbox_l3d = bbox_3d[:, :, 5]
-        bbox_ry3d = torch.zeros(bbox_l3d.shape).type(torch.cuda.FloatTensor)
+        if self.has_3d:
+            bbox_x3d = bbox_3d[:, :, 0]
+            bbox_y3d = bbox_3d[:, :, 1]
+            bbox_z3d = bbox_3d[:, :, 2]
+            bbox_w3d = bbox_3d[:, :, 3]
+            bbox_h3d = bbox_3d[:, :, 4]
+            bbox_l3d = bbox_3d[:, :, 5]
+            bbox_ry3d = torch.zeros(bbox_l3d.shape).type(torch.cuda.FloatTensor)
 
         if self.orientation_bins > 0:
             bbox_alpha = bbox_3d[:, :, 6]
@@ -108,7 +110,6 @@ class RPN_3D_loss(nn.Module):
             bbox_head = torch.zeros(bbox_l3d.shape).type(torch.cuda.FloatTensor)
 
         elif self.decomp_alpha:
-
             bbox_rsin = bbox_3d[:, :, 6]
             bbox_rcos = bbox_3d[:, :, 7]
             bbox_axis = bbox_3d[:, :, 8]
@@ -117,13 +118,13 @@ class RPN_3D_loss(nn.Module):
             if bbox_3d.shape[2] == 11 and self.has_un:
                 bbox_un = bbox_3d[:, :, 10:].clamp(min=0.0005)
 
-        else:
+        elif self.has_3d:
             bbox_ry3d = bbox_3d[:, :, 6]
             bbox_un = torch.ones(bbox_z3d.shape, requires_grad=False)
 
-        bbox_x3d_proj = torch.zeros(bbox_x3d.shape)
-        bbox_y3d_proj = torch.zeros(bbox_x3d.shape)
-        bbox_z3d_proj = torch.zeros(bbox_x3d.shape)
+            bbox_x3d_proj = torch.zeros(bbox_x3d.shape)
+            bbox_y3d_proj = torch.zeros(bbox_x3d.shape)
+            bbox_z3d_proj = torch.zeros(bbox_x3d.shape)
 
         labels = np.zeros(cls.shape[0:2])
         labels_weight = np.zeros(cls.shape[0:2])
@@ -135,15 +136,16 @@ class RPN_3D_loss(nn.Module):
         bbox_w_tar = np.zeros(cls.shape[0:2])
         bbox_h_tar = np.zeros(cls.shape[0:2])
 
-        bbox_x3d_tar = np.zeros(cls.shape[0:2])
-        bbox_y3d_tar = np.zeros(cls.shape[0:2])
-        bbox_z3d_tar = np.zeros(cls.shape[0:2])
-        bbox_w3d_tar = np.zeros(cls.shape[0:2])
-        bbox_h3d_tar = np.zeros(cls.shape[0:2])
-        bbox_l3d_tar = np.zeros(cls.shape[0:2])
-        bbox_ry3d_tar = np.zeros(cls.shape[0:2])
+        if self.has_3d:
+            bbox_x3d_tar = np.zeros(cls.shape[0:2])
+            bbox_y3d_tar = np.zeros(cls.shape[0:2])
+            bbox_z3d_tar = np.zeros(cls.shape[0:2])
+            bbox_w3d_tar = np.zeros(cls.shape[0:2])
+            bbox_h3d_tar = np.zeros(cls.shape[0:2])
+            bbox_l3d_tar = np.zeros(cls.shape[0:2])
+            bbox_ry3d_tar = np.zeros(cls.shape[0:2])
 
-        bbox_ry3d_tar_dn = torch.zeros(cls.shape[0:2]).type(torch.cuda.FloatTensor)
+            bbox_ry3d_tar_dn = torch.zeros(cls.shape[0:2]).type(torch.cuda.FloatTensor)
 
         if self.decomp_alpha:
             bbox_axis_tar = np.zeros(cls.shape[0:2])
@@ -151,16 +153,16 @@ class RPN_3D_loss(nn.Module):
             bbox_rsin_tar = np.zeros(cls.shape[0:2])
             bbox_rcos_tar = np.zeros(cls.shape[0:2])
 
-        bbox_x3d_proj_tar = torch.zeros(cls.shape[0:2])
-        bbox_y3d_proj_tar = torch.zeros(cls.shape[0:2])
-        bbox_z3d_proj_tar = torch.zeros(cls.shape[0:2])
+        if self.has_3d:
+            bbox_x3d_proj_tar = torch.zeros(cls.shape[0:2])
+            bbox_y3d_proj_tar = torch.zeros(cls.shape[0:2])
+            bbox_z3d_proj_tar = torch.zeros(cls.shape[0:2])
+            ious_3d = torch.zeros(cls.shape[0:2])
+            coords_abs_z = torch.zeros(cls.shape[0:2])
+            coords_abs_ry = torch.zeros(cls.shape[0:2])
 
         bbox_weights = np.zeros(cls.shape[0:2])
-
         ious_2d = torch.zeros(cls.shape[0:2])
-        ious_3d = torch.zeros(cls.shape[0:2])
-        coords_abs_z = torch.zeros(cls.shape[0:2])
-        coords_abs_ry = torch.zeros(cls.shape[0:2])
 
         # get all rois
         if rois is None:
@@ -171,13 +173,14 @@ class RPN_3D_loss(nn.Module):
         if len(rois.shape) == 2: rois = rois.unsqueeze(0)
 
         # denorm 3D
-        bbox_x3d_dn = bbox_x3d * self.bbox_stds[:, 4][0] + self.bbox_means[:, 4][0]
-        bbox_y3d_dn = bbox_y3d * self.bbox_stds[:, 5][0] + self.bbox_means[:, 5][0]
-        bbox_z3d_dn = bbox_z3d * self.bbox_stds[:, 6][0] + self.bbox_means[:, 6][0]
-        bbox_w3d_dn = bbox_w3d * self.bbox_stds[:, 7][0] + self.bbox_means[:, 7][0]
-        bbox_h3d_dn = bbox_h3d * self.bbox_stds[:, 8][0] + self.bbox_means[:, 8][0]
-        bbox_l3d_dn = bbox_l3d * self.bbox_stds[:, 9][0] + self.bbox_means[:, 9][0]
-        bbox_ry3d_dn = bbox_ry3d * self.bbox_stds[:, 10][0] + self.bbox_means[:, 10][0]
+        if self.has_3d: 
+            bbox_x3d_dn = bbox_x3d * self.bbox_stds[:, 4][0] + self.bbox_means[:, 4][0]
+            bbox_y3d_dn = bbox_y3d * self.bbox_stds[:, 5][0] + self.bbox_means[:, 5][0]
+            bbox_z3d_dn = bbox_z3d * self.bbox_stds[:, 6][0] + self.bbox_means[:, 6][0]
+            bbox_w3d_dn = bbox_w3d * self.bbox_stds[:, 7][0] + self.bbox_means[:, 7][0]
+            bbox_h3d_dn = bbox_h3d * self.bbox_stds[:, 8][0] + self.bbox_means[:, 8][0]
+            bbox_l3d_dn = bbox_l3d * self.bbox_stds[:, 9][0] + self.bbox_means[:, 9][0]
+            bbox_ry3d_dn = bbox_ry3d * self.bbox_stds[:, 10][0] + self.bbox_means[:, 10][0]
 
         if self.decomp_alpha:
             bbox_rsin_dn = bbox_rsin * self.bbox_stds[:, 11][0] + self.bbox_means[:, 11][0]
@@ -191,10 +194,11 @@ class RPN_3D_loss(nn.Module):
         if len(rois_3d.shape) == 2: rois_3d = rois_3d.unsqueeze(0)
 
         # compute 3d transform
-        widths = rois[:, :, 2] - rois[:, :, 0] + 1.0
-        heights = rois[:, :, 3] - rois[:, :, 1] + 1.0
-        ctr_x = rois[:, :, 0] + 0.5 * widths
-        ctr_y = rois[:, :, 1] + 0.5 * heights
+        if self.has_3d:
+            widths = rois[:, :, 2] - rois[:, :, 0] + 1.0
+            heights = rois[:, :, 3] - rois[:, :, 1] + 1.0
+            ctr_x = rois[:, :, 0] + 0.5 * widths
+            ctr_y = rois[:, :, 1] + 0.5 * heights
 
         if rois_3d_cen is None:
             bbox_x3d_dn = bbox_x3d_dn * widths + ctr_x
@@ -204,16 +208,15 @@ class RPN_3D_loss(nn.Module):
             if rois_3d_cen.shape[0] > batch_size: rois_3d_cen = rois_3d_cen[:batch_size]
             if len(rois_3d_cen.shape) == 2: rois_3d_cen = rois_3d_cen.unsqueeze(0)
 
+        if self.has_3d:
             bbox_x3d_dn = bbox_x3d_dn * widths + rois_3d_cen[:, :, 0]
             bbox_y3d_dn = bbox_y3d_dn * heights + rois_3d_cen[:, :, 1]
+            bbox_z3d_dn = rois_3d[:, :, 4] + bbox_z3d_dn
+            bbox_w3d_dn = torch.exp(bbox_w3d_dn) * rois_3d[:, :, 5]
+            bbox_h3d_dn = torch.exp(bbox_h3d_dn) * rois_3d[:, :, 6]
+            bbox_l3d_dn = torch.exp(bbox_l3d_dn) * rois_3d[:, :, 7]
 
-
-        bbox_z3d_dn = rois_3d[:, :, 4] + bbox_z3d_dn
-        bbox_w3d_dn = torch.exp(bbox_w3d_dn) * rois_3d[:, :, 5]
-        bbox_h3d_dn = torch.exp(bbox_h3d_dn) * rois_3d[:, :, 6]
-        bbox_l3d_dn = torch.exp(bbox_l3d_dn) * rois_3d[:, :, 7]
-
-        bbox_ry3d_dn = rois_3d[:, :, 8] + bbox_ry3d_dn
+            bbox_ry3d_dn = rois_3d[:, :, 8] + bbox_ry3d_dn
 
         if self.decomp_alpha:
             bbox_rsin_dn = rois_3d[:, :, 9] + bbox_rsin_dn #torch.asin(bbox_rsin_dn.clamp(min=-0.999, max=0.999))
@@ -260,11 +263,15 @@ class RPN_3D_loss(nn.Module):
                 rois = rois.cpu()
 
                 # bbox regression
-                transforms, ols, raw_gt = compute_targets(gts_val, gts_ign, box_lbls, rois[bind].numpy(), self.fg_thresh,
-                                                  self.ign_thresh, self.bg_thresh_lo, self.bg_thresh_hi,
-                                                  self.best_thresh, anchors=self.anchors,  gts_3d=gts_3d,
-                                                  tracker=rois[bind, :, 4].numpy(), rois_3d=rois_3d[bind].detach().cpu().numpy(),
-                                                          rois_3d_cen=rois_3d_cen[bind].detach().cpu().numpy())
+                if self.has_3d:
+                    transforms, ols, raw_gt = compute_targets(gts_val, gts_ign, box_lbls, rois[bind].numpy(), self.fg_thresh,
+                                              self.ign_thresh, self.bg_thresh_lo, self.bg_thresh_hi,
+                                              self.best_thresh, anchors=self.anchors,  gts_3d=gts_3d,
+                                              tracker=rois[bind, :, 4].numpy(), rois_3d=rois_3d[bind].detach().cpu().numpy(),
+                                              rois_3d_cen=rois_3d_cen[bind].detach().cpu().numpy())
+                else:
+                    transforms, ols, raw_gt = compute_targets(gts_val, gts_ign, box_lbls, rois[bind].numpy(), self.fg_thresh,
+                                              self.ign_thresh, self.bg_thresh_lo, self.bg_thresh_hi, self.best_thresh)
 
                 # normalize 2d
                 transforms[:, 0:4] -= self.bbox_means[:, 0:4]
@@ -274,7 +281,7 @@ class RPN_3D_loss(nn.Module):
                     # normalize 3d
                     transforms[:, 5:14] -= self.bbox_means[:, 4:13]
                     transforms[:, 5:14] /= self.bbox_stds[:, 4:13]
-                else:
+                elif self.has_3d:
                     # normalize 3d
                     transforms[:, 5:12] -= self.bbox_means[:, 4:11]
                     transforms[:, 5:12] /= self.bbox_stds[:, 4:11]
@@ -300,23 +307,24 @@ class RPN_3D_loss(nn.Module):
                 bbox_w_tar[bind, :] = transforms[:, 2]
                 bbox_h_tar[bind, :] = transforms[:, 3]
 
-                bbox_x3d_tar[bind, :] = transforms[:, 5]
-                bbox_y3d_tar[bind, :] = transforms[:, 6]
-                bbox_z3d_tar[bind, :] = transforms[:, 7]
-                bbox_w3d_tar[bind, :] = transforms[:, 8]
-                bbox_h3d_tar[bind, :] = transforms[:, 9]
-                bbox_l3d_tar[bind, :] = transforms[:, 10]
-                bbox_ry3d_tar[bind, :] = transforms[:, 11]
+                if self.has_3d:
+                    bbox_x3d_tar[bind, :] = transforms[:, 5]
+                    bbox_y3d_tar[bind, :] = transforms[:, 6]
+                    bbox_z3d_tar[bind, :] = transforms[:, 7]
+                    bbox_w3d_tar[bind, :] = transforms[:, 8]
+                    bbox_h3d_tar[bind, :] = transforms[:, 9]
+                    bbox_l3d_tar[bind, :] = transforms[:, 10]
+                    bbox_ry3d_tar[bind, :] = transforms[:, 11]
+
+                    bbox_x3d_proj_tar[bind, :] = raw_gt[:, 12]
+                    bbox_y3d_proj_tar[bind, :] = raw_gt[:, 13]
+                    bbox_z3d_proj_tar[bind, :] = raw_gt[:, 14]
 
                 if self.decomp_alpha:
                     bbox_axis_tar[bind, :] = raw_gt[:, 19]
                     bbox_head_tar[bind, :] = raw_gt[:, 20]
                     bbox_rsin_tar[bind, :] = transforms[:, 12]
                     bbox_rcos_tar[bind, :] = transforms[:, 13]
-
-                bbox_x3d_proj_tar[bind, :] = raw_gt[:, 12]
-                bbox_y3d_proj_tar[bind, :] = raw_gt[:, 13]
-                bbox_z3d_proj_tar[bind, :] = raw_gt[:, 14]
 
                 # ----------------------------------------
                 # box sampling
@@ -387,68 +395,68 @@ class RPN_3D_loss(nn.Module):
 
                         ious_2d[bind, fg_inds] = iou(coords_2d[fg_inds, :], coords_2d_tar[fg_inds, :], mode='list')
 
-                    bbox_x3d_dn_fg = bbox_x3d_dn[bind, fg_inds]
-                    bbox_y3d_dn_fg = bbox_y3d_dn[bind, fg_inds]
+                    if self.has_3d:
+                        bbox_x3d_dn_fg = bbox_x3d_dn[bind, fg_inds]
+                        bbox_y3d_dn_fg = bbox_y3d_dn[bind, fg_inds]
 
-                    rois_3d_fg = rois_3d[bind, fg_inds, :]
-                    if len(rois_3d_fg.shape) == 1: rois_3d_fg = rois_3d_fg.unsqueeze(0)
+                        rois_3d_fg = rois_3d[bind, fg_inds, :]
+                        if len(rois_3d_fg.shape) == 1: rois_3d_fg = rois_3d_fg.unsqueeze(0)
 
-                    bbox_x3d_dn_fg = bbox_x3d_dn[bind, fg_inds]
-                    bbox_y3d_dn_fg = bbox_y3d_dn[bind, fg_inds]
-                    bbox_z3d_dn_fg = bbox_z3d_dn[bind, fg_inds]
-                    bbox_w3d_dn_fg = bbox_w3d_dn[bind, fg_inds]
-                    bbox_h3d_dn_fg = bbox_h3d_dn[bind, fg_inds]
-                    bbox_l3d_dn_fg = bbox_l3d_dn[bind, fg_inds]
-                    bbox_ry3d_dn_fg = bbox_ry3d_dn[bind, fg_inds]
+                        bbox_x3d_dn_fg = bbox_x3d_dn[bind, fg_inds]
+                        bbox_y3d_dn_fg = bbox_y3d_dn[bind, fg_inds]
+                        bbox_z3d_dn_fg = bbox_z3d_dn[bind, fg_inds]
+                        bbox_w3d_dn_fg = bbox_w3d_dn[bind, fg_inds]
+                        bbox_h3d_dn_fg = bbox_h3d_dn[bind, fg_inds]
+                        bbox_l3d_dn_fg = bbox_l3d_dn[bind, fg_inds]
+                        bbox_ry3d_dn_fg = bbox_ry3d_dn[bind, fg_inds]
 
-                    if self.decomp_alpha:
-                        axis_sin_mask = bbox_axis_tar[bind, fg_inds] == 1
-                        head_pos_mask = bbox_head_tar[bind, fg_inds] == 1
+                        if self.decomp_alpha:
+                            axis_sin_mask = bbox_axis_tar[bind, fg_inds] == 1
+                            head_pos_mask = bbox_head_tar[bind, fg_inds] == 1
 
-                        if not self.torch_bool:
-                            axis_sin_mask = torch.from_numpy(np.array(axis_sin_mask, dtype=np.uint8))
-                            head_pos_mask = torch.from_numpy(np.array(head_pos_mask, dtype=np.uint8))
+                            if not self.torch_bool:
+                                axis_sin_mask = torch.from_numpy(np.array(axis_sin_mask, dtype=np.uint8))
+                                head_pos_mask = torch.from_numpy(np.array(head_pos_mask, dtype=np.uint8))
 
-                        bbox_ry3d_dn_fg = bbox_rcos_dn[bind, fg_inds]
-                        bbox_ry3d_dn_fg[axis_sin_mask] = bbox_rsin_dn[bind, fg_inds][axis_sin_mask]
-                        bbox_ry3d_dn_fg[head_pos_mask] = bbox_ry3d_dn_fg[head_pos_mask] + math.pi
+                            bbox_ry3d_dn_fg = bbox_rcos_dn[bind, fg_inds]
+                            bbox_ry3d_dn_fg[axis_sin_mask] = bbox_rsin_dn[bind, fg_inds][axis_sin_mask]
+                            bbox_ry3d_dn_fg[head_pos_mask] = bbox_ry3d_dn_fg[head_pos_mask] + math.pi
 
-                    # re-scale all 2D back to original
-                    bbox_x3d_dn_fg /= imobj['scale_factor']
-                    bbox_y3d_dn_fg /= imobj['scale_factor']
+                        # re-scale all 2D back to original
+                        bbox_x3d_dn_fg /= imobj['scale_factor']
+                        bbox_y3d_dn_fg /= imobj['scale_factor']
 
-                    #coords_2d = torch.cat((bbox_x3d_dn_fg[np.newaxis,:] * bbox_z3d_dn_fg[np.newaxis,:], bbox_y3d_dn_fg[np.newaxis,:] * bbox_z3d_dn_fg[np.newaxis,:], bbox_z3d_dn_fg[np.newaxis,:]), dim=0)
-                    #coords_2d = torch.cat((coords_2d, torch.ones([1, coords_2d.shape[1]])), dim=0)
+                        #coords_2d = torch.cat((bbox_x3d_dn_fg[np.newaxis,:] * bbox_z3d_dn_fg[np.newaxis,:], bbox_y3d_dn_fg[np.newaxis,:] * bbox_z3d_dn_fg[np.newaxis,:], bbox_z3d_dn_fg[np.newaxis,:]), dim=0)
+                        #coords_2d = torch.cat((coords_2d, torch.ones([1, coords_2d.shape[1]])), dim=0)
 
-                    #coords_3d = torch.mm(p2_inv, coords_2d)
+                        #coords_3d = torch.mm(p2_inv, coords_2d)
 
-                    z3d = bbox_z3d_dn_fg - p2_h
-                    x3d = ((z3d + p2_h) * bbox_x3d_dn_fg - p2_b * (z3d) - p2_c) / p2_a
-                    y3d = ((z3d + p2_h) * bbox_y3d_dn_fg - p2_e * (z3d) - p2_f) / p2_d
+                        z3d = bbox_z3d_dn_fg - p2_h
+                        x3d = ((z3d + p2_h) * bbox_x3d_dn_fg - p2_b * (z3d) - p2_c) / p2_a
+                        y3d = ((z3d + p2_h) * bbox_y3d_dn_fg - p2_e * (z3d) - p2_f) / p2_d
 
-                    bbox_x3d_proj[bind, fg_inds] = x3d
-                    bbox_y3d_proj[bind, fg_inds] = y3d
-                    bbox_z3d_proj[bind, fg_inds] = z3d
+                        bbox_x3d_proj[bind, fg_inds] = x3d
+                        bbox_y3d_proj[bind, fg_inds] = y3d
+                        bbox_z3d_proj[bind, fg_inds] = z3d
 
-                    # absolute targets
-                    bbox_z3d_dn_tar = bbox_z3d_tar[bind, fg_inds] * self.bbox_stds[:, 6][0] + self.bbox_means[:, 6][0]
-                    bbox_z3d_dn_tar = torch.tensor(bbox_z3d_dn_tar, requires_grad=False).type(torch.cuda.FloatTensor)
-                    bbox_z3d_dn_tar = rois_3d_fg[:, 4] + bbox_z3d_dn_tar
+                        # absolute targets
+                        bbox_z3d_dn_tar = bbox_z3d_tar[bind, fg_inds] * self.bbox_stds[:, 6][0] + self.bbox_means[:, 6][0]
+                        bbox_z3d_dn_tar = torch.tensor(bbox_z3d_dn_tar, requires_grad=False).type(torch.cuda.FloatTensor)
+                        bbox_z3d_dn_tar = rois_3d_fg[:, 4] + bbox_z3d_dn_tar
 
-                    bbox_ry3d_dn_tar = bbox_ry3d_tar[bind, fg_inds] * self.bbox_stds[:, 10][0] + self.bbox_means[:, 10][0]
-                    bbox_ry3d_dn_tar = torch.tensor(bbox_ry3d_dn_tar, requires_grad=False).type(torch.cuda.FloatTensor)
-                    bbox_ry3d_dn_tar = rois_3d_fg[:, 8] + bbox_ry3d_dn_tar
+                        bbox_ry3d_dn_tar = bbox_ry3d_tar[bind, fg_inds] * self.bbox_stds[:, 10][0] + self.bbox_means[:, 10][0]
+                        bbox_ry3d_dn_tar = torch.tensor(bbox_ry3d_dn_tar, requires_grad=False).type(torch.cuda.FloatTensor)
+                        bbox_ry3d_dn_tar = rois_3d_fg[:, 8] + bbox_ry3d_dn_tar
 
-                    if self.decomp_alpha:
+                        if self.decomp_alpha:
+                            bbox_ry3d_dn_tar = raw_gt[fg_inds, 11]
+                            #bbox_ry3d_dn_tar[axis_sin_mask] = raw_gt[fg_inds, 17][axis_sin_mask]
 
-                        bbox_ry3d_dn_tar = raw_gt[fg_inds, 11]
-                        #bbox_ry3d_dn_tar[axis_sin_mask] = raw_gt[fg_inds, 17][axis_sin_mask]
+                            bbox_ry3d_dn_tar = bbox_ry3d_dn_tar.cuda()
+                            bbox_ry3d_tar_dn[bind, fg_inds] = bbox_ry3d_dn_tar.clone()
 
-                        bbox_ry3d_dn_tar = bbox_ry3d_dn_tar.cuda()
-                        bbox_ry3d_tar_dn[bind, fg_inds] = bbox_ry3d_dn_tar.clone()
-
-                    coords_abs_z[bind, fg_inds] = torch.abs(bbox_z3d_dn_tar - bbox_z3d_dn_fg)
-                    coords_abs_ry[bind, fg_inds] = torch.abs(bbox_ry3d_dn_tar - snap_to_pi(bbox_ry3d_dn_fg))
+                        coords_abs_z[bind, fg_inds] = torch.abs(bbox_z3d_dn_tar - bbox_z3d_dn_fg)
+                        coords_abs_ry[bind, fg_inds] = torch.abs(bbox_ry3d_dn_tar - snap_to_pi(bbox_ry3d_dn_fg))
 
             else:
 
@@ -629,22 +637,23 @@ class RPN_3D_loss(nn.Module):
                 if self.verbose: stats.append({'name': 'bbox_2d', 'val': bbox_2d_loss.detach(), 'format': '{:0.4f}', 'group': 'loss'})
 
             # bbox center distance
-            bbox_x3d_proj_tar = bbox_x3d_proj_tar.view(-1)
-            bbox_y3d_proj_tar = bbox_y3d_proj_tar.view(-1)
-            bbox_z3d_proj_tar = bbox_z3d_proj_tar.view(-1)
+            if self.has_3d:
+                bbox_x3d_proj_tar = bbox_x3d_proj_tar.view(-1)
+                bbox_y3d_proj_tar = bbox_y3d_proj_tar.view(-1)
+                bbox_z3d_proj_tar = bbox_z3d_proj_tar.view(-1)
 
-            bbox_x3d_proj = bbox_x3d_proj[:, :].view(-1)
-            bbox_y3d_proj = bbox_y3d_proj[:, :].view(-1)
-            bbox_z3d_proj = bbox_z3d_proj[:, :].view(-1)
+                bbox_x3d_proj = bbox_x3d_proj[:, :].view(-1)
+                bbox_y3d_proj = bbox_y3d_proj[:, :].view(-1)
+                bbox_z3d_proj = bbox_z3d_proj[:, :].view(-1)
 
-            cen_dist = torch.sqrt(((bbox_x3d_proj[active] - bbox_x3d_proj_tar[active])**2)
+                cen_dist = torch.sqrt(((bbox_x3d_proj[active] - bbox_x3d_proj_tar[active])**2)
                                   + ((bbox_y3d_proj[active] - bbox_y3d_proj_tar[active])**2)
                                   + ((bbox_z3d_proj[active] - bbox_z3d_proj_tar[active])**2))
 
-            cen_match = (cen_dist <= 0.20).type(torch.cuda.FloatTensor)
+                cen_match = (cen_dist <= 0.20).type(torch.cuda.FloatTensor)
 
-            if self.verbose: stats.append({'name': 'cen', 'val': cen_dist.mean().detach(), 'format': '{:0.2f}', 'group': 'misc'})
-            stats.append({'name': 'match', 'val': cen_match.mean().detach(), 'format': '{:0.3f}', 'group': 'misc'})
+                if self.verbose: stats.append({'name': 'cen', 'val': cen_dist.mean().detach(), 'format': '{:0.2f}', 'group': 'misc'})
+                stats.append({'name': 'match', 'val': cen_match.mean().detach(), 'format': '{:0.3f}', 'group': 'misc'})
 
             if self.bbox_3d_lambda:
 
@@ -809,8 +818,9 @@ class RPN_3D_loss(nn.Module):
                 stats.append({'name': 'un', 'val': loss_bbox_un.detach(), 'format': '{:0.4f}', 'group': 'loss'})
                 stats.append({'name': 'conf', 'val': bbox_un[active].mean().detach(), 'format': '{:0.2f}', 'group': 'misc'})
 
-            stats.append({'name': 'z', 'val': coords_abs_z[active].detach().mean(), 'format': '{:0.2f}', 'group': 'misc'})
-            stats.append({'name': 'ry', 'val': coords_abs_ry[active].detach().mean(), 'format': '{:0.2f}', 'group': 'misc'})
+            if self.has_3d:
+                stats.append({'name': 'z', 'val': coords_abs_z[active].detach().mean(), 'format': '{:0.2f}', 'group': 'misc'})
+                stats.append({'name': 'ry', 'val': coords_abs_ry[active].detach().mean(), 'format': '{:0.2f}', 'group': 'misc'})
 
             if not self.infer_2d_from_3d:
                 ious_2d = ious_2d.view(-1)

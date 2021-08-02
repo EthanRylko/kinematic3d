@@ -22,12 +22,12 @@ from lib.imdb_util import *
 
 # settings
 exp_name = 'trained_mnas'
-weights_path = '/mnt/home/rylkoeth/med_mnas/weights/model_80000_pkl'
-conf_path = '/mnt/home/rylkoeth/med_mnas/conf.pkl'
+weights_path = '/mnt/home/rylkoeth/kinematic3d/output/bdd100kmnas/weights/model_80000_pkl'
+conf_path = '/mnt/home/rylkoeth/kinematic3d/output/bdd100kmnas/conf.pkl'
 
 out_dir = '/mnt/home/rylkoeth/tmp/'
 
-dataset_test = 'kitti_split1'
+dataset_test = 'bdd100kmodded'
 dataset_type = 'validation'
 
 suffix = '_ss'
@@ -335,4 +335,4 @@ _, test_iter, _ = file_parts(results)
 test_iter = test_iter.replace('results_', '')
 
 if dataset_type == 'validation':
-    evaluate_kitti_results_verbose('data', dataset_test, results_data, test_iter, rpn_conf, use_logging=False, fast=False, default_eval=eval_type)
+    evaluate_kitti_results_verbose('data', dataset_test, results_data, test_iter, rpn_conf, use_logging=True, fast=True, default_eval=eval_type)
