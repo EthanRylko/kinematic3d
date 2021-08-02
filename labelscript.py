@@ -1,6 +1,7 @@
 import sys, os
 from PIL import Image
 
+# change paths and file names to fit needs
 infilename = 'det_val.json'
 indirname = 'data/bdd100k/labels/det_20/'
 
@@ -58,7 +59,7 @@ while line != '':
         
         # write to file if any pedestrians found
         if lines != []:
-            '''try:
+            try:
                 # use pillow to copy file and convert properly
                 img = Image.open(imgsindirname + infilename + '.jpg')
                 img.save(imgsoutdirname + '%06d.png' % outfilenum)
@@ -72,12 +73,7 @@ while line != '':
                 outfilenum += 1
 
             except FileNotFoundError:
-                print('file does not exist in 10k set')
-                print(imgsindirname + infilename + '.jpg')
-                pass'''
-            # use pillow to copy file and convert properly
-            img = Image.open(imgsindirname + infilename + '.jpg')
-            img.save(imgsoutdirname + '%06d.png' % outfilenum)
+                print('file does not exist in 100k set')
 
             outfile = open(outdirname + '%06d.txt' % outfilenum, 'w')
             for l in lines:
