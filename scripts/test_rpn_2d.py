@@ -9,6 +9,7 @@ import os
 from copy import deepcopy
 import numpy as np
 import matplotlib.pyplot as plt
+from math import *
 
 # stop python from writing so much bytecode
 sys.dont_write_bytecode = True
@@ -50,6 +51,9 @@ use_gts |= write_im
 # load config
 rpn_conf = edict(pickle_read(conf_path))
 rpn_conf.pretrained = None
+rpn_conf.has_3d = False
+rpn_conf.decomp_alpha = False
+rpn_conf.has_un = False
 
 # make directories
 mkdir_if_missing(results)
@@ -134,7 +138,6 @@ for imind, impath in enumerate(imlist):
     p2_h = p2[2, 3].item()
 
     if write_im:
-
         # copy the canvas
         canvas_bev = deepcopy(canvas_bev_orig)
         im0_orig = deepcopy(im0)
@@ -142,25 +145,19 @@ for imind, impath in enumerate(imlist):
     if use_gts:
         gts = read_kitti_label(os.path.join('data', dataset_test, dataset_type, 'label_2', name + '.txt'), p2)
 
-        igns, rmvs = determine_ignores(gts, ['Car'], rpn_conf.ilbls, rpn_conf.min_gt_vis, rpn_conf.min_gt_h)
+        igns, rmvs = determine_ignores(gts, rpn_conf.lbls, rpn_conf.ilbls, rpn_conf.min_gt_vis, rpn_conf.min_gt_h)
 
         gts_full = bbXYWH2Coords(np.array([gt['bbox_full'] for gt in gts]))
-        gts_3d = np.array([gt['bbox_3d'] for gt in gts])
-        gts_cen = np.array([gt['center_3d'] for gt in gts])
         gts_cls = np.array([gt['cls'] for gt in gts])
 
         gts_full = gts_full[(rmvs == False) & (igns == False), :]
-        gts_3d = gts_3d[(rmvs == False) & (igns == False), :]
-        gts_cen = gts_cen[(rmvs == False) & (igns == False), :]
         gts_cls = gts_cls[(rmvs == False) & (igns == False)]
 
     if has_cache and not ignore_cache:
         aboxes = cache_boxes[imind][0]
-
     else:
-
         # forward test batch
-        aboxes = im_detect_3d(im0, net, rpn_conf, preprocess, p2)
+        aboxes = im_detect_2d(im0, net, rpn_conf, preprocess)
         cache_boxes.append(deepcopy((aboxes,)))
 
     base_path, name, ext = file_parts(impath)
@@ -179,7 +176,7 @@ for imind, impath in enumerate(imlist):
         if 'has_un' in rpn_conf and rpn_conf.has_un:
             score = score * box[13]
 
-        if cls.lower() =='car':
+        if cls.lower() != '':
 
             x1 = box[0]
             y1 = box[1]
@@ -188,38 +185,13 @@ for imind, impath in enumerate(imlist):
             width = (x2 - x1 + 1)
             height = (y2 - y1 + 1)
 
-            x2d = box[6]
-            y2d = box[7]
-            z2d = box[8]
-            w3d = box[9]
-            h3d = box[10]
-            l3d = box[11]
-            alpha = box[12]
-
-            # convert alpha into ry3d
-            coord3d = np.linalg.inv(p2).dot(np.array([x2d * z2d, y2d * z2d, 1 * z2d, 1]))
-            ry3d = convertAlpha2Rot(alpha, coord3d[2], coord3d[0])
-
-            step_r = 0.3 * math.pi
-            r_lim = 0.01
-
             box_2d = np.array([x1, y1, width, height])
-
-            while ry3d > math.pi: ry3d -= math.pi * 2
-            while ry3d < (-math.pi): ry3d += math.pi * 2
-
-            # predict a more accurate projection
-            coord3d = np.linalg.inv(p2).dot(np.array([x2d * z2d, y2d * z2d, 1 * z2d, 1]))
-
-            x3d = coord3d[0]
-            y3d = coord3d[1]
-            z3d = coord3d[2]
+            if not (isnan(x1) or isnan(y1) or isnan(x2) or isnan(y2)):
+               im0_orig = cv2.rectangle(im0_orig, (int(x1), int(y1)), (int(x2), int(y2)), (255, 0, 0), 2)
 
             if use_gts:
-
                 cur_2d = np.array([[x1, y1, x2, y2]])
-                verts_cur, corners_3d_cur = project_3d(p2, x3d, y3d, z3d, w3d, h3d, l3d, ry3d, return_3d=True)
-
+               
                 # match with gt
                 ols_gts = iou(cur_2d, gts_full)[0, :]
                 if ols_gts.shape[0] > 0:
@@ -227,71 +199,22 @@ for imind, impath in enumerate(imlist):
                     ol_gt = np.amax(ols_gts)
                 else: ol_gt = 0
 
-                # found gt?
-                if ol_gt > 0.5:
+                scores_orig.append(box[4])
+                scores.append(score)
+                stats_iou.append(ol_gt)
 
-                    # get gt values
-                    gt_x3d = gts_cen[gtind, 0]
-                    gt_y3d = gts_cen[gtind, 1]
-                    gt_z3d = gts_cen[gtind, 2]
-                    gt_x2d = gts_cen[gtind, 0]
-                    gt_y2d = gts_cen[gtind, 1]
-                    gt_z2d = gts_cen[gtind, 2]
-                    gt_w3d = gts_3d[gtind, 3]
-                    gt_h3d = gts_3d[gtind, 4]
-                    gt_l3d = gts_3d[gtind, 5]
-                    gt_alpha = gts_3d[gtind, 6]
-                    gt_rotY = gts_3d[gtind, 10]
-                    gt_el = gts_3d[gtind, 11]
+                iou_cur = np.round(ol_gt, 2)
 
-                    verts_cur, corners_3d_cur = project_3d(p2, x3d, y3d, z3d, w3d, h3d, l3d, ry3d, return_3d=True)
-                    verts_gts, corners_3d_gt = project_3d(p2, gt_x3d, gt_y3d, gt_z3d, gt_w3d, gt_h3d, gt_l3d, gt_rotY, return_3d=True)
+                if cls == 'Pedesrian' and iou_cur >= 0.25: success = True
+                else: success = False
+                if success: print(success, imind)
+                stats_mat.append(success)
 
-                    # compute 3D IoU
-                    iou_bev_cur, iou_3d_cur = iou3d(corners_3d_cur, corners_3d_gt, gt_h3d * gt_l3d * gt_w3d + h3d * l3d * w3d)
+                c = c_succ if success else c_fail
 
-                    scores_orig.append(box[4])
-                    scores.append(score)
-                    stats_iou.append(iou_3d_cur)
-
-                    if score > rpn_conf.score_thres:
-                        stats_z.append(np.abs(gt_z3d - z3d))
-                        stats_deg.append(np.rad2deg(np.abs(snap_to_pi(gt_alpha) - snap_to_pi(alpha))))
-
-                    iou_3d_cur = np.round(iou_3d_cur, 2)
-
-                    if cls == 'Cyclist' and iou_3d_cur >= 0.5: success = True
-                    elif cls == 'Pedesrian' and iou_3d_cur >= 0.5: success = True
-                    elif cls == 'Car' and iou_3d_cur >= 0.7: success = True
-                    else: success = False
-
-                    stats_mat.append(success)
-
-                    c = c_succ if success else c_fail
-
-
-                    if write_im and score > rpn_conf.score_thres:
-
-                        # draw 3D iou and ground truth
-                        draw_text(im0_orig, 'iou={:.2f}'.format(iou_3d_cur), (x1, y1))
-                        draw_bev(canvas_bev, gt_z3d, gt_l3d, gt_w3d, gt_x3d, gt_rotY, color=c_gts, scale=bev_scale, thickness=2)
-
-                else: c = c_fail
-
-                if write_im and score > rpn_conf.score_thres:
-
-                    # draw detected box
-                    draw_3d_box(im0_orig, verts_cur, c, thickness=2)
-                    draw_bev(canvas_bev, z3d, l3d, w3d, x3d, ry3d, color=c, scale=bev_scale, thickness=3)
-
-            y3d += h3d / 2
-
-            alpha = convertRot2Alpha(ry3d, z3d, x3d)
-
-            if score > rpn_conf.score_thres:
-                text_to_write += ('{} -1 -1 {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} {:.6f} '
-                                  + '{:.6f} {:.6f}\n').format(cls, alpha, x1, y1, x2, y2, h3d, w3d, l3d, x3d, y3d, z3d, ry3d, score)
-
+    if score > rpn_conf.score_thres:
+        text_to_write += ('{} -1 -1 {:.6f} {:.6f} {:.6f} {:.6f} {:.6f}'
+                          ).format(cls, x1, y1, x2, y2, score)
     file.write(text_to_write)
     file.close()
 
