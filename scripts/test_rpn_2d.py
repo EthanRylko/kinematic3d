@@ -205,9 +205,8 @@ for imind, impath in enumerate(imlist):
 
                 iou_cur = np.round(ol_gt, 2)
 
-                if cls == 'Pedesrian' and iou_cur >= 0.25: success = True
+                if cls == 'Pedestrian' and iou_cur >= 0.50: success = True
                 else: success = False
-                if success: print(success, imind)
                 stats_mat.append(success)
 
                 c = c_succ if success else c_fail
